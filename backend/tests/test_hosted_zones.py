@@ -33,7 +33,8 @@ def test_create_get_update_delete(
     assert zone["id"].startswith("Z") and len(zone["id"]) == 21
     assert zone["name"] == name
     assert zone["type"] == "PUBLIC"
-    assert zone["record_count"] == 0
+    # Auto-created NS + SOA records.
+    assert zone["record_count"] == 2
 
     zid = zone["id"]
     r = client.get(f"{API}/{zid}", headers=auth_headers)

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base, TimestampMixin
 
 if TYPE_CHECKING:
+    from app.models.dns_record import DnsRecord
     from app.models.user import User
 
 
@@ -34,4 +35,6 @@ class HostedZone(Base, TimestampMixin):
     )
 
     owner: Mapped[User] = relationship()
-    # `records` relationship added in Phase 4 when DnsRecord lands.
+    records: Mapped[list[DnsRecord]] = relationship(
+        back_populates="hosted_zone", cascade="all, delete-orphan"
+    )

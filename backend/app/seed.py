@@ -4,8 +4,7 @@ Usage::
 
     .venv/bin/python -m app.seed
 
-Idempotent: re-running won't duplicate the demo user or zones. DNS records
-seeded in Phase 4 once the records service exists.
+Idempotent: re-running won't duplicate the demo user, zones, or records.
 """
 
 from __future__ import annotations
@@ -17,8 +16,10 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.database import SessionLocal, init_db
 from app.core.security import hash_password
+from app.models.hosted_zone import HostedZone
 from app.models.user import User
 from app.repositories import user as user_repo
+from app.services import dns_record as record_service
 from app.services import hosted_zone as zone_service
 
 
@@ -28,12 +29,40 @@ class _ZoneSpec(TypedDict):
     comment: str | None
 
 
+class _RecordSpec(TypedDict):
+    name: str
+    type: str
+    ttl: int
+    value: str
+
+
 DEMO_ZONES: list[_ZoneSpec] = [
     {"name": "example.com.", "type": "PUBLIC", "comment": "Marketing site"},
     {"name": "internal.example.com.", "type": "PRIVATE", "comment": "VPC private DNS"},
     {"name": "shop.example.net.", "type": "PUBLIC", "comment": "Storefront"},
     {"name": "api.example.io.", "type": "PUBLIC", "comment": None},
 ]
+
+DEMO_RECORDS: dict[str, list[_RecordSpec]] = {
+    "example.com.": [
+        {"name": "www.example.com.", "type": "A", "ttl": 300, "value": "203.0.113.10"},
+        {"name": "blog.example.com.", "type": "CNAME", "ttl": 300, "value": "www.example.com."},
+        {"name": "example.com.", "type": "MX", "ttl": 3600, "value": "10 mail.example.com."},
+        {
+            "name": "example.com.",
+            "type": "TXT",
+            "ttl": 300,
+            "value": '"v=spf1 include:_spf.example.com ~all"',
+        },
+    ],
+    "shop.example.net.": [
+        {"name": "shop.example.net.", "type": "A", "ttl": 60, "value": "203.0.113.42"},
+        {"name": "cdn.shop.example.net.", "type": "AAAA", "ttl": 300, "value": "2001:db8::1"},
+    ],
+    "api.example.io.": [
+        {"name": "api.example.io.", "type": "A", "ttl": 60, "value": "198.51.100.7"},
+    ],
+}
 
 
 def seed_demo_user(db: Session) -> User:
@@ -53,6 +82,22 @@ def seed_demo_user(db: Session) -> User:
     return user
 
 
+def _seed_records(db: Session, zone: HostedZone) -> None:
+    for spec in DEMO_RECORDS.get(zone.name, []):
+        try:
+            record_service.create_record(
+                db,
+                zone=zone,
+                name=spec["name"],
+                record_type=spec["type"],
+                ttl=spec["ttl"],
+                value=spec["value"],
+            )
+            print(f"  [seed]   + {spec['type']:<6} {spec['name']}")
+        except Exception as exc:
+            print(f"  [seed]   ! skip {spec['type']} {spec['name']}: {exc}")
+
+
 def seed_demo_zones(db: Session, user: User) -> None:
     for spec in DEMO_ZONES:
         try:
@@ -64,6 +109,7 @@ def seed_demo_zones(db: Session, user: User) -> None:
                 comment=spec["comment"],
             )
             print(f"[seed] created zone {zone.id} {zone.name} ({zone.type})")
+            _seed_records(db, zone)
         except Exception as exc:
             print(f"[seed] skipped {spec['name']} ({spec['type']}): {exc}")
 

@@ -8,6 +8,7 @@ from app.core.exceptions import ConflictError, NotFoundError
 from app.core.ids import hosted_zone_id
 from app.models.hosted_zone import HostedZone
 from app.repositories import hosted_zone as zone_repo
+from app.services.zone_bootstrap import create_default_records
 
 
 def list_zones(
@@ -61,6 +62,7 @@ def create_zone(
         zone_type=zone_type,
         comment=comment,
     )
+    create_default_records(db, zone)
     db.commit()
     db.refresh(zone)
     return zone
