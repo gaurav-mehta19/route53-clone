@@ -26,9 +26,12 @@ over real persistence.
 cd backend
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
-.venv/bin/python -m app.seed                    
 .venv/bin/uvicorn app.main:app --reload --port 8000
 ```
+
+The first boot auto-seeds the demo user + zones + records (idempotent — gated
+on whether the demo user exists). If you want to seed manually for any reason:
+`.venv/bin/python -m app.seed`.
 
 ### Frontend (in a second terminal)
 
@@ -50,12 +53,17 @@ cd frontend && npm run typecheck && npm run lint && npm run build
 
 ### Environment
 
-Backend reads `DATABASE_URL`, `SESSION_TTL_SECONDS`, `CORS_ORIGINS`, and the
-demo-credential triple from env (or `backend/.env`). All have sensible
-defaults — the only one worth changing locally is `DATABASE_URL` if you
-want to point at a different SQLite file.
+Backend reads `DATABASE_URL`, `SESSION_TTL_SECONDS`, `CORS_ORIGINS`,
+`CORS_ORIGIN_REGEX`, and the demo-credential triple from env (or
+`backend/.env`). All have sensible defaults — locally you typically need
+to change nothing. The `CORS_ORIGIN_REGEX` defaults to
+`^https://.*\.vercel\.app$`, which makes every Vercel preview deploy work
+against a Render-hosted backend without re-listing each URL.
+
+See `backend/.env.example` for the full annotated list.
 
 Frontend reads `NEXT_PUBLIC_API_BASE_URL` (default `http://localhost:8000`).
+See `frontend/.env.example`.
 
 ---
 
