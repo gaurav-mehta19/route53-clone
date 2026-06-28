@@ -26,7 +26,7 @@ over real persistence.
 cd backend
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
-.venv/bin/python -m app.seed                       # demo user + zones + records
+.venv/bin/python -m app.seed                    
 .venv/bin/uvicorn app.main:app --reload --port 8000
 ```
 
