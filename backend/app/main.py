@@ -9,17 +9,40 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
-from app.core.database import init_db
+from app.core.database import SessionLocal, init_db
 from app.core.exceptions import register_exception_handlers
+from app.core.security import hash_password
+from app.repositories import user as user_repo
 from app.routers import auth as auth_router
 from app.routers import dns_records as dns_records_router
 from app.routers import hosted_zones as hosted_zones_router
 from app.routers import stats as stats_router
 
 
+def _seed_demo_user_if_empty() -> None:
+    """Create the demo user on first boot.
+
+    Render's free tier has an ephemeral disk: the SQLite DB resets on every
+    redeploy, which would otherwise wipe the demo credentials shown on the
+    login page. This is a no-op once the user exists.
+    """
+    settings = get_settings()
+    with SessionLocal() as db:
+        if user_repo.get_by_email(db, settings.demo_email) is not None:
+            return
+        user_repo.create(
+            db,
+            email=settings.demo_email,
+            password_hash=hash_password(settings.demo_password),
+            display_name=settings.demo_display_name,
+        )
+        db.commit()
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     init_db()
+    _seed_demo_user_if_empty()
     yield
 
 
@@ -30,6 +53,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
+        allow_origin_regex=settings.cors_origin_regex or None,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

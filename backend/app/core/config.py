@@ -32,6 +32,9 @@ class Settings(BaseSettings):
             "http://127.0.0.1:3000",
         ]
     )
+    # Regex applied on top of `cors_origins`. The default matches every
+    # Vercel preview URL so PR previews work without redeploying the API.
+    cors_origin_regex: str = r"^https://.*\.vercel\.app$"
 
     # Demo credentials surfaced on the login page.
     demo_email: str = "demo@example.com"
