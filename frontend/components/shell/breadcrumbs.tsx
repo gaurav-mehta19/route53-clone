@@ -6,7 +6,9 @@ import BreadcrumbGroup, {
 import { usePathname, useRouter } from 'next/navigation';
 import { useMemo } from 'react';
 
-const LABELS: Record<string, string> = {
+import { useBreadcrumbLabels } from '@/providers/breadcrumb-provider';
+
+const STATIC_LABELS: Record<string, string> = {
   dashboard: 'Dashboard',
   'hosted-zones': 'Hosted zones',
   'traffic-policies': 'Traffic policies',
@@ -15,13 +17,10 @@ const LABELS: Record<string, string> = {
   profiles: 'Profiles',
 };
 
-function labelFor(segment: string): string {
-  return LABELS[segment] ?? segment;
-}
-
 export function AppBreadcrumbs() {
   const router = useRouter();
   const pathname = usePathname() ?? '/dashboard';
+  const dynamicLabels = useBreadcrumbLabels();
 
   const items = useMemo<BreadcrumbGroupProps.Item[]>(() => {
     const segments = pathname.split('/').filter(Boolean);
@@ -29,10 +28,11 @@ export function AppBreadcrumbs() {
     let acc = '';
     for (const seg of segments) {
       acc += `/${seg}`;
-      crumbs.push({ text: labelFor(seg), href: acc });
+      const text = dynamicLabels[seg] ?? STATIC_LABELS[seg] ?? seg;
+      crumbs.push({ text, href: acc });
     }
     return crumbs;
-  }, [pathname]);
+  }, [pathname, dynamicLabels]);
 
   return (
     <BreadcrumbGroup
