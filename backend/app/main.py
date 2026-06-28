@@ -12,6 +12,7 @@ from app.core.config import get_settings
 from app.core.database import init_db
 from app.core.exceptions import register_exception_handlers
 from app.routers import auth as auth_router
+from app.routers import hosted_zones as hosted_zones_router
 
 
 @asynccontextmanager
@@ -40,6 +41,7 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     app.include_router(auth_router.router)
+    app.include_router(hosted_zones_router.router)
 
     return app
 

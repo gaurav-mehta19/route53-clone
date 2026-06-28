@@ -3,7 +3,8 @@
 `init_db()` relies on this import to register tables on the metadata.
 """
 
+from app.models.hosted_zone import HostedZone
 from app.models.session import UserSession
 from app.models.user import User
 
-__all__ = ["User", "UserSession"]
+__all__ = ["HostedZone", "User", "UserSession"]

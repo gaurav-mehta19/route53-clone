@@ -39,3 +39,13 @@ def _bootstrap_db() -> Iterator[None]:
 @pytest.fixture
 def client() -> TestClient:
     return TestClient(app)
+
+
+@pytest.fixture
+def auth_headers(client: TestClient) -> dict[str, str]:
+    r = client.post(
+        "/api/auth/login",
+        json={"email": "demo@example.com", "password": "demo1234"},
+    )
+    assert r.status_code == 200, r.text
+    return {"Authorization": f"Bearer {r.json()['token']}"}
