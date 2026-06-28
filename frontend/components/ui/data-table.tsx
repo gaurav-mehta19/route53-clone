@@ -87,6 +87,8 @@ export function DataTable<T>(props: DataTableProps<T>) {
       variant="full-page"
       resizableColumns
       wrapLines={false}
+      contentDensity="compact"
+      stripedRows
       selectionType={props.selectionType}
       selectedItems={props.selectedItems}
       onSelectionChange={(e) => props.onSelectionChange?.(e.detail.selectedItems)}

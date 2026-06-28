@@ -1,15 +1,14 @@
 'use client';
 
-// Top-of-dashboard KPI tiles. Pull totals from the same hosted-zones
-// endpoint the rest of the app uses — paginated count + a single
-// large-page fetch for the record_count sum (good up to 200 zones,
-// which is plenty for a demo console).
+// Top-of-dashboard KPI tiles. Totals come from the dedicated /api/stats
+// endpoint so the dashboard works correctly regardless of how many zones
+// the user owns (the earlier client-side sum capped at 200 zones).
 
 import Box from '@cloudscape-design/components/box';
 import ColumnLayout from '@cloudscape-design/components/column-layout';
 import Container from '@cloudscape-design/components/container';
 
-import { useHostedZones } from '@/hooks/use-hosted-zones';
+import { useStats } from '@/hooks/use-stats';
 
 function Tile({ label, value }: { label: string; value: string | number }) {
   return (
@@ -23,24 +22,15 @@ function Tile({ label, value }: { label: string; value: string | number }) {
 }
 
 export function MetricTiles() {
-  const all = useHostedZones({ page: 1, page_size: 200 });
-  const totals = all.data;
-  const items = totals?.items ?? [];
-
-  const total = totals?.total ?? 0;
-  const publicCount = items.filter((z) => z.type === 'PUBLIC').length;
-  const privateCount = items.filter((z) => z.type === 'PRIVATE').length;
-  const recordTotal = items.reduce((sum, z) => sum + z.record_count, 0);
-
-  const loadingDash = '—';
-
+  const { data, isLoading } = useStats();
+  const dash = '—';
   return (
     <Container>
       <ColumnLayout columns={4} variant="text-grid">
-        <Tile label="Hosted zones" value={all.isLoading ? loadingDash : total} />
-        <Tile label="Public zones" value={all.isLoading ? loadingDash : publicCount} />
-        <Tile label="Private zones" value={all.isLoading ? loadingDash : privateCount} />
-        <Tile label="DNS records" value={all.isLoading ? loadingDash : recordTotal} />
+        <Tile label="Hosted zones" value={isLoading || !data ? dash : data.total_zones} />
+        <Tile label="Public zones" value={isLoading || !data ? dash : data.public_zones} />
+        <Tile label="Private zones" value={isLoading || !data ? dash : data.private_zones} />
+        <Tile label="DNS records" value={isLoading || !data ? dash : data.total_records} />
       </ColumnLayout>
     </Container>
   );

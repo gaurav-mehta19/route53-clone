@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { dnsRecordKeys } from '@/hooks/use-dns-records';
 import { hostedZoneKeys } from '@/hooks/use-hosted-zones';
+import { statsKeys } from '@/hooks/use-stats';
 import { dnsRecordsApi } from '@/lib/api/dns-records';
 import type {
   DnsRecord,
@@ -32,8 +33,9 @@ function invalidateZone(
   zoneId: string,
 ): void {
   void qc.invalidateQueries({ queryKey: dnsRecordKeys.forZone(zoneId) });
-  // record_count on the zone changed; refresh the list too.
+  // record_count on the zone changed; refresh the list + dashboard tiles.
   void qc.invalidateQueries({ queryKey: hostedZoneKeys.all });
+  void qc.invalidateQueries({ queryKey: statsKeys.all });
 }
 
 export function useCreateRecord() {

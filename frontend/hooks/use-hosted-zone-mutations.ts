@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { hostedZoneKeys } from '@/hooks/use-hosted-zones';
+import { statsKeys } from '@/hooks/use-stats';
 import { hostedZonesApi } from '@/lib/api/hosted-zones';
 import type {
   HostedZone,
@@ -16,6 +17,7 @@ export function useCreateHostedZone() {
     mutationFn: (payload) => hostedZonesApi.create(payload),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: hostedZoneKeys.all });
+      void qc.invalidateQueries({ queryKey: statsKeys.all });
     },
   });
 }
@@ -62,6 +64,7 @@ export function useDeleteHostedZone() {
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: hostedZoneKeys.all });
+      void qc.invalidateQueries({ queryKey: statsKeys.all });
     },
   });
 }
