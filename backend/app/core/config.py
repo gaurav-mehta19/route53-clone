@@ -25,8 +25,13 @@ class Settings(BaseSettings):
     # Token expiry for the mock auth flow (24h is fine for a demo console).
     session_ttl_seconds: int = 60 * 60 * 24
 
-    # CORS — frontend dev origin by default.
-    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
+    # CORS — frontend dev origins by default (Next dev binds either name).
+    cors_origins: list[str] = Field(
+        default_factory=lambda: [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+        ]
+    )
 
     # Demo credentials surfaced on the login page.
     demo_email: str = "demo@example.com"
