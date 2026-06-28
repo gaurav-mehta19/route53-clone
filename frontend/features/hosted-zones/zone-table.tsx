@@ -1,8 +1,8 @@
 'use client';
 
-// The hosted-zones page is essentially this component. Holds the page-local
+// The hosted-zones page is essentially this component. Holds page-local
 // state (page/sort/filter/selection), drives the DataTable, and orchestrates
-// the create/edit/delete modal lifecycle.
+// the create/edit/delete modal lifecycle. `c` opens the create modal.
 
 import Button from '@cloudscape-design/components/button';
 import Select from '@cloudscape-design/components/select';
@@ -10,13 +10,16 @@ import SpaceBetween from '@cloudscape-design/components/space-between';
 import type { TableProps } from '@cloudscape-design/components/table';
 import { useMemo, useState } from 'react';
 
+import { BulkDeleteModal } from '@/components/ui/bulk-delete-modal';
 import { DataTable } from '@/components/ui/data-table';
 import { PageHeader } from '@/components/ui/page-header';
 import { buildZoneColumns } from '@/features/hosted-zones/columns';
 import { CreateZoneModal } from '@/features/hosted-zones/create-zone-modal';
 import { DeleteZoneModal } from '@/features/hosted-zones/delete-zone-modal';
 import { EditZoneModal } from '@/features/hosted-zones/edit-zone-modal';
+import { useDeleteHostedZone } from '@/hooks/use-hosted-zone-mutations';
 import { useHostedZones } from '@/hooks/use-hosted-zones';
+import { useKeyboardShortcut } from '@/hooks/use-keyboard-shortcut';
 import type { HostedZone, ZoneType } from '@/lib/types/hosted-zone';
 import { useAuth } from '@/providers/auth-provider';
 
@@ -37,7 +40,9 @@ export function HostedZonesTable() {
   const [selected, setSelected] = useState<HostedZone[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<HostedZone | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<HostedZone | null>(null);
+  const [singleDeleteTarget, setSingleDeleteTarget] = useState<HostedZone | null>(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const bulkDelete = useDeleteHostedZone();
 
   const query = useHostedZones({
     page,
@@ -53,9 +58,15 @@ export function HostedZonesTable() {
     [columns, sortField],
   );
 
+  useKeyboardShortcut({ key: 'c', enabled: !createOpen && !editTarget && !singleDeleteTarget && !bulkOpen }, () => setCreateOpen(true));
+
   const items = query.data?.items ?? [];
   const total = query.data?.total ?? 0;
-  const onlySelected = selected[0] ?? null;
+  const onlySelected = selected.length === 1 ? selected[0]! : null;
+  const onDeleteClick = () => {
+    if (selected.length === 1) setSingleDeleteTarget(selected[0]!);
+    else if (selected.length > 1) setBulkOpen(true);
+  };
 
   return (
     <>
@@ -72,10 +83,7 @@ export function HostedZonesTable() {
         totalCount={total}
         onPageChange={setPage}
         filteringText={search}
-        onFilteringTextChange={(v) => {
-          setPage(1);
-          setSearch(v);
-        }}
+        onFilteringTextChange={(v) => { setPage(1); setSearch(v); }}
         filteringPlaceholder="Find hosted zones"
         secondaryFilterControls={
           <Select
@@ -92,40 +100,27 @@ export function HostedZonesTable() {
         sortingDescending={sortDesc}
         onSortingChange={(state) => {
           const field = state.sortingColumn.sortingField;
-          if (field) {
-            setSortField(field);
-            setSortDesc(state.isDescending);
-          }
+          if (field) { setSortField(field); setSortDesc(state.isDescending); }
         }}
-        selectionType="single"
+        selectionType="multi"
         selectedItems={selected}
         onSelectionChange={setSelected}
         emptyTitle="No hosted zones"
         emptySubtitle="Create your first hosted zone to start managing DNS records."
-        emptyAction={
-          <Button variant="primary" onClick={() => setCreateOpen(true)}>
-            Create hosted zone
-          </Button>
-        }
+        emptyAction={<Button variant="primary" onClick={() => setCreateOpen(true)}>Create hosted zone</Button>}
         header={
           <PageHeader
             title="Hosted zones"
             counter={query.data ? `(${total})` : undefined}
+            description="Press c to create a new hosted zone."
             actions={
               <SpaceBetween direction="horizontal" size="xs">
                 <Button iconName="refresh" onClick={() => query.refetch()} ariaLabel="Refresh" />
-                <Button disabled={!onlySelected} onClick={() => setEditTarget(onlySelected)}>
-                  Edit
+                <Button disabled={!onlySelected} onClick={() => setEditTarget(onlySelected)}>Edit</Button>
+                <Button disabled={selected.length === 0} onClick={onDeleteClick}>
+                  {selected.length > 1 ? `Delete (${selected.length})` : 'Delete'}
                 </Button>
-                <Button
-                  disabled={!onlySelected}
-                  onClick={() => setDeleteTarget(onlySelected)}
-                >
-                  Delete
-                </Button>
-                <Button variant="primary" onClick={() => setCreateOpen(true)}>
-                  Create hosted zone
-                </Button>
+                <Button variant="primary" onClick={() => setCreateOpen(true)}>Create hosted zone</Button>
               </SpaceBetween>
             }
           />
@@ -135,11 +130,16 @@ export function HostedZonesTable() {
       <CreateZoneModal visible={createOpen} onDismiss={() => setCreateOpen(false)} />
       <EditZoneModal zone={editTarget} onDismiss={() => setEditTarget(null)} />
       <DeleteZoneModal
-        zone={deleteTarget}
-        onDismiss={() => {
-          setDeleteTarget(null);
-          setSelected([]);
-        }}
+        zone={singleDeleteTarget}
+        onDismiss={() => { setSingleDeleteTarget(null); setSelected([]); }}
+      />
+      <BulkDeleteModal<HostedZone>
+        visible={bulkOpen}
+        items={selected}
+        resourceLabel="hosted zone"
+        describe={(z) => z.name}
+        onDeleteOne={(z) => bulkDelete.mutateAsync(z.id)}
+        onDismiss={() => { setBulkOpen(false); setSelected([]); }}
       />
     </>
   );

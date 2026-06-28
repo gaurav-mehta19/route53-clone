@@ -6,13 +6,16 @@ import SpaceBetween from '@cloudscape-design/components/space-between';
 import type { TableProps } from '@cloudscape-design/components/table';
 import { useMemo, useState } from 'react';
 
+import { BulkDeleteModal } from '@/components/ui/bulk-delete-modal';
 import { DataTable } from '@/components/ui/data-table';
 import { PageHeader } from '@/components/ui/page-header';
 import { RECORD_COLUMNS } from '@/features/records/columns';
 import { CreateRecordModal } from '@/features/records/create-record-modal';
 import { DeleteRecordModal } from '@/features/records/delete-record-modal';
 import { EditRecordModal } from '@/features/records/edit-record-modal';
+import { useDeleteRecord } from '@/hooks/use-dns-record-mutations';
 import { useZoneRecords } from '@/hooks/use-dns-records';
+import { useKeyboardShortcut } from '@/hooks/use-keyboard-shortcut';
 import {
   CREATABLE_RECORD_TYPES,
   type CreatableRecordType,
@@ -35,7 +38,9 @@ export function RecordsTable({ zone }: { zone: HostedZone }) {
   const [selected, setSelected] = useState<DnsRecord[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<DnsRecord | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<DnsRecord | null>(null);
+  const [singleDeleteTarget, setSingleDeleteTarget] = useState<DnsRecord | null>(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const bulkDelete = useDeleteRecord();
 
   const query = useZoneRecords(zone.id, {
     page,
@@ -50,9 +55,18 @@ export function RecordsTable({ zone }: { zone: HostedZone }) {
     [sortField],
   );
 
+  useKeyboardShortcut(
+    { key: 'c', enabled: !createOpen && !editTarget && !singleDeleteTarget && !bulkOpen },
+    () => setCreateOpen(true),
+  );
+
   const items = query.data?.items ?? [];
   const total = query.data?.total ?? 0;
-  const onlySelected = selected[0] ?? null;
+  const onlySelected = selected.length === 1 ? selected[0]! : null;
+  const onDeleteClick = () => {
+    if (selected.length === 1) setSingleDeleteTarget(selected[0]!);
+    else if (selected.length > 1) setBulkOpen(true);
+  };
 
   return (
     <>
@@ -69,10 +83,7 @@ export function RecordsTable({ zone }: { zone: HostedZone }) {
         totalCount={total}
         onPageChange={setPage}
         filteringText={search}
-        onFilteringTextChange={(v) => {
-          setPage(1);
-          setSearch(v);
-        }}
+        onFilteringTextChange={(v) => { setPage(1); setSearch(v); }}
         filteringPlaceholder="Find records by name or value"
         secondaryFilterControls={
           <Select
@@ -89,40 +100,27 @@ export function RecordsTable({ zone }: { zone: HostedZone }) {
         sortingDescending={sortDesc}
         onSortingChange={(state) => {
           const field = state.sortingColumn.sortingField;
-          if (field) {
-            setSortField(field);
-            setSortDesc(state.isDescending);
-          }
+          if (field) { setSortField(field); setSortDesc(state.isDescending); }
         }}
-        selectionType="single"
+        selectionType="multi"
         selectedItems={selected}
         onSelectionChange={setSelected}
         emptyTitle="No records"
         emptySubtitle="Add an A, CNAME, MX or other record to this zone."
-        emptyAction={
-          <Button variant="primary" onClick={() => setCreateOpen(true)}>
-            Create record
-          </Button>
-        }
+        emptyAction={<Button variant="primary" onClick={() => setCreateOpen(true)}>Create record</Button>}
         header={
           <PageHeader
             title="Records"
             counter={query.data ? `(${total})` : undefined}
+            description="Press c to create a new record."
             actions={
               <SpaceBetween direction="horizontal" size="xs">
                 <Button iconName="refresh" onClick={() => query.refetch()} ariaLabel="Refresh" />
-                <Button disabled={!onlySelected} onClick={() => setEditTarget(onlySelected)}>
-                  Edit
+                <Button disabled={!onlySelected} onClick={() => setEditTarget(onlySelected)}>Edit</Button>
+                <Button disabled={selected.length === 0} onClick={onDeleteClick}>
+                  {selected.length > 1 ? `Delete (${selected.length})` : 'Delete'}
                 </Button>
-                <Button
-                  disabled={!onlySelected}
-                  onClick={() => setDeleteTarget(onlySelected)}
-                >
-                  Delete
-                </Button>
-                <Button variant="primary" onClick={() => setCreateOpen(true)}>
-                  Create record
-                </Button>
+                <Button variant="primary" onClick={() => setCreateOpen(true)}>Create record</Button>
               </SpaceBetween>
             }
           />
@@ -132,11 +130,16 @@ export function RecordsTable({ zone }: { zone: HostedZone }) {
       <CreateRecordModal zone={createOpen ? zone : null} onDismiss={() => setCreateOpen(false)} />
       <EditRecordModal record={editTarget} onDismiss={() => setEditTarget(null)} />
       <DeleteRecordModal
-        record={deleteTarget}
-        onDismiss={() => {
-          setDeleteTarget(null);
-          setSelected([]);
-        }}
+        record={singleDeleteTarget}
+        onDismiss={() => { setSingleDeleteTarget(null); setSelected([]); }}
+      />
+      <BulkDeleteModal<DnsRecord>
+        visible={bulkOpen}
+        items={selected}
+        resourceLabel="record"
+        describe={(r) => `${r.type} ${r.name}`}
+        onDeleteOne={(r) => bulkDelete.mutateAsync({ zoneId: r.hosted_zone_id, recordId: r.id })}
+        onDismiss={() => { setBulkOpen(false); setSelected([]); }}
       />
     </>
   );

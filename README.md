@@ -16,6 +16,16 @@ over real persistence.
 > **Backend:** <http://localhost:8000> (API + `/docs` for the OpenAPI UI)
 > **Frontend:** <http://localhost:3000>
 
+## Screenshots
+
+**Dashboard** — live KPI tiles, 7-day activity sparkline, recent zones, quick links.
+
+![Dashboard](frontend/public/dashboard.png)
+
+**Hosted zones** — dense Cloudscape table with the exact Route 53 column set, search, type filter, multi-select for bulk delete, sortable headers.
+
+![Hosted zones](frontend/public/hosted-zones.png)
+
 ---
 
 ## 1. Run it locally
@@ -47,7 +57,8 @@ appears immediately.
 ### Run the tests
 
 ```bash
-cd backend && .venv/bin/pytest tests/ -q           # ~26 tests
+cd backend  && .venv/bin/pytest tests/ -q     # 28 backend tests
+cd frontend && npm test                       # 17 frontend tests (vitest)
 cd frontend && npm run typecheck && npm run lint && npm run build
 ```
 
@@ -123,23 +134,55 @@ frontend/
 
 Strict one-directional layering on both sides. Nothing skips layers.
 
+### Frontend (Next.js · Cloudscape · TanStack Query)
+
 ```text
-                Frontend                                  Backend
-  ┌──────────────────────────────┐         ┌──────────────────────────────┐
-  │  app/(console)/<route>/page  │         │  routers/<resource>.py        │
-  │     ↓                         │         │     ↓                         │
-  │  features/<resource>/         │         │  services/<resource>.py       │
-  │   ├ table.tsx (orchestrator)  │         │     ↓                         │
-  │   └ {create,edit,delete}.tsx  │         │  repositories/<resource>.py   │
-  │     ↓                         │         │     ↓                         │
-  │  hooks/use-<resource>.ts      │  HTTP   │  models/<resource>.py         │
-  │  hooks/use-<r>-mutations.ts ──┼─────────┼→ schemas/<resource>.py        │
-  │     ↓                         │  JSON   │  validators/registry.py       │
-  │  lib/api/<resource>.ts        │         │     ↑                         │
-  │     ↓                         │         │  core/{db,exceptions,deps}    │
-  │  lib/api/client.ts ───────────┴─────────┘
-  └──────────────────────────────┘
+app/(console)/<route>/page.tsx        ── routing, ContentLayout, ZoneHeader
+            │
+            ▼
+features/<resource>/table.tsx         ── page-orchestrator (page/sort/filter
+            │                            state + modal lifecycle)
+            ▼
+features/<resource>/{create,edit,     ── modals: zod-validated forms,
+                    delete}-modal.tsx    notifications, API error surfacing
+            │
+            ▼
+hooks/use-<resource>.ts               ── TanStack Query: list + detail
+hooks/use-<resource>-mutations.ts        create / update / delete
+            │                            (optimistic delete, query invalidation)
+            ▼
+lib/api/<resource>.ts                 ── typed per-resource request fns
+            │
+            ▼
+lib/api/client.ts                     ── ONLY fetch call site; adds auth,
+            │                            decodes error envelope -> ApiError
+            ▼
+                            ── HTTP / JSON ──►   Backend
 ```
+
+### Backend (FastAPI · SQLAlchemy 2.x · Pydantic v2 · SQLite)
+
+```text
+routers/<resource>.py                 ── HTTP layer: parse, dispatch,
+            │                            shape response (thin)
+            ▼
+services/<resource>.py                ── business logic, validation,
+            │                            commits, ownership scoping
+            ▼
+repositories/<resource>.py            ── sole DB-access layer
+            │                            (sessions, ilike search, paged list)
+            ▼
+models/<resource>.py                  ── SQLAlchemy 2.x ORM (Mapped[...])
+
+                              · siblings shared across layers ·
+schemas/<resource>.py                 ── Pydantic request/response shapes
+validators/{ip,hostname,structured,   ── per-record-type value rules +
+            registry}.py                 apex / TTL / in-zone enforcement
+core/{config, database, dependencies, ── settings, engine, FastAPI deps,
+      exceptions, ids, security}        error envelope, ID gen, bcrypt
+```
+
+### Rules
 
 **Backend rules:**
 
@@ -208,6 +251,7 @@ Pagination params: `page` (≥1), `page_size` (1–200), `search`, `type`, `sort
 | PATCH | `/api/records/{recordId}` | bearer | `{ttl?, value?}` — only changed fields |
 | DELETE | `/api/records/{recordId}` | bearer | ownership-scoped |
 | GET | `/api/stats` | bearer | dashboard totals (zones, public, private, records) |
+| GET | `/api/stats/activity?days=N` | bearer | records-created per day, last N days (1–90) |
 | GET | `/api/health` | – | liveness |
 
 Full live spec at <http://localhost:8000/docs>.
@@ -252,29 +296,59 @@ checks only — backend is authoritative):
 - **NS/SOA nameservers** — auto-created at zone creation with placeholder
   values (`ns-1.awsdns-clone.com.` …). The shape is right; the names are
   cosmetic.
-- **Service sections** — Dashboard is real (driven by `/api/stats` +
-  `useHostedZones`). Traffic policies / Health checks / Resolver / Profiles
-  render a polished "Coming soon" page with the real Route 53-style
-  description of what each section does.
+- **Service sections** — Dashboard is real: KPI tiles from `/api/stats`,
+  a 7-day "records created" sparkline from `/api/stats/activity` (sourced
+  from actual `dns_records.created_at` timestamps), and a recent-zones
+  list. Traffic policies / Health checks / Resolver / Profiles render a
+  polished "Coming soon" page with the real Route 53-style description
+  of what each section does.
 - **Region/account** — the top nav shows a static `us-east-1` chip.
 
 ---
 
-## 8. Testing
+## 8. Bonus features
 
-- **Backend:** `pytest` covers auth happy/error paths + envelope shape,
+Of the five bonus items in the spec:
+
+- ✅ **Dark mode** — Cloudscape `applyMode` toggle in the top nav,
+  persisted to `localStorage`.
+- ✅ **Bulk operations** — multi-select on both the hosted-zones and
+  records tables, with a typed-confirmation bulk delete modal that loops
+  per-item and surfaces individual failures.
+- ✅ **Keyboard shortcuts** — `c` opens the create modal on the hosted-
+  zones and records pages (suppressed while typing in inputs).
+- ❌ **Import / export BIND zone files** — skipped; parser work would
+  have compromised the core slice.
+
+---
+
+## 9. Testing
+
+- **Backend — 28 pytests.** Auth happy/error paths + envelope shape,
   hosted-zones CRUD + pagination/search/filter/sort + 409 on dup + 422
   on bad domain + 401 unauthenticated, records CRUD + auto NS/SOA on zone
   create + dup → 409 + three validation error paths + paginate/search/filter,
   per-type validators (11 cases incl. apex CNAME ban and TTL bounds),
-  and `/api/stats` sums.
-- **Frontend:** `tsc --noEmit` (strict + `noUncheckedIndexedAccess`),
-  ESLint, and `next build` are the gate. Live smoke tests after each phase
-  exercised the actual API the UI calls.
+  `/api/stats` sums, and `/api/stats/activity` daily buckets.
+- **Frontend — 17 vitest tests.** `ApiError` envelope handling, zod
+  schemas for both create forms, `EmptyState` rendering, `useKeyboardShortcut`
+  hook behaviour (fires / ignores non-matching / respects `enabled` /
+  skips while typing). `tsc --noEmit` (strict + `noUncheckedIndexedAccess`),
+  ESLint, and `next build` are the gate; CI runs all of it on every push.
 
 ---
 
-## 9. Decisions log
+## 10. Continuous integration
+
+`.github/workflows/ci.yml` runs on every push and PR to `main`:
+
+- **Backend job** — `ruff check`, `mypy app/`, `pytest tests/ -q`.
+- **Frontend job** — `npm ci`, `npm run typecheck`, `npm run lint`,
+  `npm run build`, `npm test`.
+
+---
+
+## 11. Decisions log
 
 Architectural decisions and trade-offs are recorded in
 [`DECISIONS.md`](./DECISIONS.md).

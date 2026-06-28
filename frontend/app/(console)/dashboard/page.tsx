@@ -7,6 +7,7 @@ import Header from '@cloudscape-design/components/header';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import { useRouter } from 'next/navigation';
 
+import { ActivityChart } from '@/features/dashboard/activity-chart';
 import { MetricTiles } from '@/features/dashboard/metric-tiles';
 import { QuickLinks } from '@/features/dashboard/quick-links';
 import { RecentZones } from '@/features/dashboard/recent-zones';
@@ -34,6 +35,7 @@ export default function DashboardPage() {
     >
       <SpaceBetween size="l">
         <MetricTiles />
+        <ActivityChart />
         <Grid gridDefinition={[{ colspan: { default: 12, l: 8 } }, { colspan: { default: 12, l: 4 } }]}>
           <RecentZones />
           <QuickLinks />
