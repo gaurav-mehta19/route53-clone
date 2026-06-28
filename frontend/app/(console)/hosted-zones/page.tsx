@@ -1,12 +1,15 @@
 'use client';
 
-import { PlaceholderPage } from '@/components/shell/placeholder-page';
+import ContentLayout from '@cloudscape-design/components/content-layout';
+
+import { HostedZonesTable } from '@/features/hosted-zones/zone-table';
 
 export default function HostedZonesPage() {
+  // The table renders its own PageHeader inside the DataTable's header slot
+  // (matches Cloudscape's full-page table pattern), so ContentLayout is empty.
   return (
-    <PlaceholderPage
-      title="Hosted zones"
-      description="Full CRUD experience wires up in Phase 7."
-    />
+    <ContentLayout>
+      <HostedZonesTable />
+    </ContentLayout>
   );
 }
