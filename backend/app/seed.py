@@ -9,60 +9,21 @@ Idempotent: re-running won't duplicate the demo user, zones, or records.
 
 from __future__ import annotations
 
-from typing import TypedDict
+from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.database import SessionLocal, init_db
 from app.core.security import hash_password
+from app.models.dns_record import DnsRecord
 from app.models.hosted_zone import HostedZone
 from app.models.user import User
 from app.repositories import user as user_repo
+from app.seed_data import ACTIVITY_PATTERN, DEMO_RECORDS, DEMO_ZONES
 from app.services import dns_record as record_service
 from app.services import hosted_zone as zone_service
-
-
-class _ZoneSpec(TypedDict):
-    name: str
-    type: str
-    comment: str | None
-
-
-class _RecordSpec(TypedDict):
-    name: str
-    type: str
-    ttl: int
-    value: str
-
-
-DEMO_ZONES: list[_ZoneSpec] = [
-    {"name": "example.com.", "type": "PUBLIC", "comment": "Marketing site"},
-    {"name": "internal.example.com.", "type": "PRIVATE", "comment": "VPC private DNS"},
-    {"name": "shop.example.net.", "type": "PUBLIC", "comment": "Storefront"},
-    {"name": "api.example.io.", "type": "PUBLIC", "comment": None},
-]
-
-DEMO_RECORDS: dict[str, list[_RecordSpec]] = {
-    "example.com.": [
-        {"name": "www.example.com.", "type": "A", "ttl": 300, "value": "203.0.113.10"},
-        {"name": "blog.example.com.", "type": "CNAME", "ttl": 300, "value": "www.example.com."},
-        {"name": "example.com.", "type": "MX", "ttl": 3600, "value": "10 mail.example.com."},
-        {
-            "name": "example.com.",
-            "type": "TXT",
-            "ttl": 300,
-            "value": '"v=spf1 include:_spf.example.com ~all"',
-        },
-    ],
-    "shop.example.net.": [
-        {"name": "shop.example.net.", "type": "A", "ttl": 60, "value": "203.0.113.42"},
-        {"name": "cdn.shop.example.net.", "type": "AAAA", "ttl": 300, "value": "2001:db8::1"},
-    ],
-    "api.example.io.": [
-        {"name": "api.example.io.", "type": "A", "ttl": 60, "value": "198.51.100.7"},
-    ],
-}
 
 
 def seed_demo_user(db: Session) -> User:
@@ -98,6 +59,33 @@ def _seed_records(db: Session, zone: HostedZone) -> None:
             print(f"  [seed]   ! skip {spec['type']} {spec['name']}: {exc}")
 
 
+def _backdate_for_activity_chart(db: Session, user: User) -> None:
+    """Spread record `created_at` across the last 7 days so the activity
+    sparkline has shape on a fresh demo. Without this, every timestamp
+    clusters on day 0 and the chart shows a single spike on the right.
+    """
+    now = datetime.now(UTC)
+    records = db.scalars(
+        select(DnsRecord)
+        .join(HostedZone, HostedZone.id == DnsRecord.hosted_zone_id)
+        .where(HostedZone.created_by == user.id)
+        .order_by(DnsRecord.id)
+    ).all()
+
+    # pattern[0] records land on day -6, pattern[1] on day -5, …, pattern[-1] on day 0.
+    days_ago_per_record: list[int] = []
+    for i, count in enumerate(ACTIVITY_PATTERN):
+        days_ago_per_record.extend([len(ACTIVITY_PATTERN) - 1 - i] * count)
+
+    for idx, rec in enumerate(records):
+        days_ago = days_ago_per_record[idx % len(days_ago_per_record)]
+        ts = now - timedelta(days=days_ago, hours=(idx * 3) % 18)
+        rec.created_at = ts
+        rec.updated_at = ts
+    db.commit()
+    print(f"[seed] backdated {len(records)} records across {len(ACTIVITY_PATTERN)} days")
+
+
 def seed_demo_zones(db: Session, user: User) -> None:
     for spec in DEMO_ZONES:
         try:
@@ -112,6 +100,7 @@ def seed_demo_zones(db: Session, user: User) -> None:
             _seed_records(db, zone)
         except Exception as exc:
             print(f"[seed] skipped {spec['name']} ({spec['type']}): {exc}")
+    _backdate_for_activity_chart(db, user)
 
 
 def main() -> None:

@@ -26,6 +26,10 @@ over real persistence.
 
 ![Hosted zones](frontend/public/hosted-zones.png)
 
+**Records inside a zone** — zone metadata header, then a records table with Route 53's column set (Record name / Type / Routing policy / Value / TTL). Auto-created NS + SOA shown alongside user records; multi-select for bulk delete; `c` shortcut hint inline; per-type colored badges.
+
+![Records inside a zone](frontend/public/records.png)
+
 ---
 
 ## 1. Run it locally
